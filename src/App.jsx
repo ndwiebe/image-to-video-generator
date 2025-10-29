@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Upload, Play, Download, AlertCircle, CheckCircle, Loader } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, Play, Download, AlertCircle, CheckCircle, Loader, Trash2 } from 'lucide-react';
 
 export default function ImageToVideoGenerator() {
   const [apiToken, setApiToken] = useState('');
@@ -22,6 +22,31 @@ export default function ImageToVideoGenerator() {
   const [loading, setLoading] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [videoResults, setVideoResults] = useState(null);
+
+  // Load API token from browser storage when app starts
+  useEffect(() => {
+    const savedToken = localStorage.getItem('a2e_api_token');
+    if (savedToken) {
+      setApiToken(savedToken);
+    }
+  }, []);
+
+  // Save API token to browser storage whenever it changes
+  const handleApiTokenChange = (newToken) => {
+    setApiToken(newToken);
+    if (newToken) {
+      localStorage.setItem('a2e_api_token', newToken);
+    } else {
+      localStorage.removeItem('a2e_api_token');
+    }
+  };
+
+  // Clear saved API token
+  const clearSavedToken = () => {
+    setApiToken('');
+    localStorage.removeItem('a2e_api_token');
+    setStatus('API token cleared from browser storage');
+  };
 
   // Handle local image upload
   const handleImageUpload = (e) => {
@@ -240,15 +265,46 @@ export default function ImageToVideoGenerator() {
           <AlertCircle size={20} />
           Step 1: Enter Your API Token
         </h2>
-        <input
-          type="password"
-          value={apiToken}
-          onChange={(e) => setApiToken(e.target.value)}
-          placeholder="Paste your Bearer token here"
-          style={{ width: '100%', padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
-        />
-        <p style={{ fontSize: '13px', color: '#666', marginTop: '8px' }}>
-          Get your API token from the A2E.ai dashboard
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
+          <input
+            type="password"
+            value={apiToken}
+            onChange={(e) => handleApiTokenChange(e.target.value)}
+            placeholder="Paste your Bearer token here"
+            style={{ flex: 1, padding: '12px', border: '1px solid #d1d5db', borderRadius: '6px', fontSize: '14px' }}
+          />
+          <button
+            onClick={clearSavedToken}
+            disabled={!apiToken}
+            style={{
+              padding: '12px 16px',
+              backgroundColor: apiToken ? '#dc2626' : '#d1d5db',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontSize: '14px',
+              fontWeight: '600',
+              cursor: apiToken ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            <Trash2 size={16} />
+            Clear
+          </button>
+        </div>
+        {apiToken && (
+          <div style={{ backgroundColor: '#dcfce7', border: '1px solid #86efac', borderRadius: '6px', padding: '10px', marginBottom: '8px' }}>
+            <p style={{ fontSize: '13px', color: '#166534', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <CheckCircle size={16} />
+              ✨ API token saved! It will auto-fill next time you visit.
+            </p>
+          </div>
+        )}
+        <p style={{ fontSize: '13px', color: '#666' }}>
+          Get your API token from the A2E.ai dashboard. It will be saved in your browser for convenience.
         </p>
       </div>
 
