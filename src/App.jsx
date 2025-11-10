@@ -4,12 +4,14 @@ function App() {
   const [apiToken, setApiToken] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [videoTime, setVideoTime] = useState(5);
-  const [modelName, setModelName] = useState('Dream Machine');
+  const [modelType, setModelType] = useState('I2V');
   const [promptText, setPromptText] = useState('');
+  const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, chaotic, deformed, watermark, bad anatomy, shaky camera view point');
   const [numberOfImages, setNumberOfImages] = useState(1);
+  const [extendPrompt, setExtendPrompt] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [generationId, setGenerationId] = useState('');
-  const [videoUrl, setVideoUrl] = useState('');
+  const [taskData, setTaskData] = useState(null);
+  const [videoResults, setVideoResults] = useState([]);
   const [status, setStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -58,39 +60,43 @@ function App() {
     }
 
     setIsGenerating(true);
-    setVideoUrl('');
+    setVideoResults([]);
     setStatus('Initiating generation...');
     setErrorMessage('');
 
     const directImageUrl = convertToDirectUrl(imageUrl);
 
     try {
-      const response = await fetch('https://video.a2e.ai/v1/image_to_video/generation', {
+      // Using the CORRECT API endpoint from documentation
+      const response = await fetch('https://video.a2e.ai/api/v1/userImage2Video/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': apiToken
+          'Authorization': `Bearer ${apiToken}`
         },
         body: JSON.stringify({
+          name: `Video_${new Date().toLocaleString()}`,
           image_url: directImageUrl,
+          prompt: promptText || 'high quality, clear, cinematic',
+          negative_prompt: negativePrompt,
+          model_type: modelType,
           video_time: videoTime,
-          model_name: modelName,
-          prompt_text: promptText,
+          extend_prompt: extendPrompt,
           number_of_images: numberOfImages
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `API error: ${response.status}`);
-      }
-
       const data = await response.json();
-      setGenerationId(data.generation_id);
-      setStatus('Video generation started! Checking status...');
-      
-      // Start checking status
-      checkStatus(data.generation_id);
+
+      if (data.code === 0 && data.data) {
+        setTaskData(data.data);
+        setStatus('Video generation started! Task created successfully.');
+        
+        // Start checking status after 10 seconds
+        setTimeout(() => checkStatus(), 10000);
+      } else {
+        throw new Error(data.message || 'Failed to start video generation');
+      }
     } catch (error) {
       console.error('Error:', error);
       setErrorMessage(`Error: ${error.message}`);
@@ -99,33 +105,49 @@ function App() {
     }
   };
 
-  const checkStatus = async (genId) => {
+  const checkStatus = async () => {
+    if (!apiToken) {
+      setErrorMessage('API token missing');
+      return;
+    }
+
     try {
-      const response = await fetch(`https://video.a2e.ai/v1/image_to_video/generation/${genId}`, {
+      const response = await fetch('https://video.a2e.ai/api/v1/userImage2Video/allRecords', {
         method: 'GET',
         headers: {
-          'Authorization': apiToken
+          'Authorization': `Bearer ${apiToken}`,
+          'Content-Type': 'application/json'
         }
       });
 
-      if (!response.ok) {
-        throw new Error(`Status check failed: ${response.status}`);
-      }
-
       const data = await response.json();
       
-      if (data.generation.status === 'completed') {
-        setVideoUrl(data.generation.video_url);
-        setStatus('Video generation completed!');
-        setIsGenerating(false);
-      } else if (data.generation.status === 'failed') {
-        setStatus('Generation failed. Please try again.');
-        setErrorMessage('Video generation failed');
-        setIsGenerating(false);
+      if (data.code === 0 && data.data) {
+        // Sort by creation date to get most recent first
+        const sortedVideos = data.data.sort((a, b) => 
+          new Date(b.createdAt) - new Date(a.createdAt)
+        );
+        
+        setVideoResults(sortedVideos);
+        
+        // Check if the most recent task is still processing
+        const latestTask = sortedVideos[0];
+        if (latestTask) {
+          if (latestTask.current_status === 'completed') {
+            setStatus('Video generation completed!');
+            setIsGenerating(false);
+          } else if (latestTask.current_status === 'failed') {
+            setStatus('Generation failed: ' + (latestTask.failed_message || 'Unknown error'));
+            setIsGenerating(false);
+          } else {
+            setStatus(`Status: ${latestTask.current_status}... Checking again in 10 seconds...`);
+            // Continue checking
+            setTimeout(() => checkStatus(), 10000);
+          }
+        }
       } else {
-        setStatus(`Status: ${data.generation.status}... Checking again in 5 seconds...`);
-        // Check again in 5 seconds
-        setTimeout(() => checkStatus(genId), 5000);
+        setErrorMessage('Failed to fetch video status');
+        setIsGenerating(false);
       }
     } catch (error) {
       console.error('Status check error:', error);
@@ -133,6 +155,12 @@ function App() {
       setStatus('');
       setIsGenerating(false);
     }
+  };
+
+  // Manual status check
+  const manualCheckStatus = () => {
+    setStatus('Checking status...');
+    checkStatus();
   };
 
   return (
@@ -149,7 +177,7 @@ function App() {
         <div style={{ display: 'flex', gap: '10px' }}>
           <input
             type="password"
-            placeholder="Enter your A2E.ai API token"
+            placeholder="Enter your Bearer token"
             value={apiToken}
             onChange={(e) => setApiToken(e.target.value)}
             style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
@@ -201,15 +229,16 @@ function App() {
         {/* Model Selection */}
         <div>
           <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-            Model
+            Model Type
           </label>
           <select
-            value={modelName}
-            onChange={(e) => setModelName(e.target.value)}
+            value={modelType}
+            onChange={(e) => setModelType(e.target.value)}
             style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
           >
-            <option value="Dream Machine">Dream Machine</option>
-            <option value="Stable Video">Stable Video</option>
+            <option value="I2V">I2V (Standard)</option>
+            <option value="GENERAL">General</option>
+            <option value="FLF2V">FLF2V (First-Last Frame)</option>
           </select>
         </div>
 
@@ -230,15 +259,30 @@ function App() {
             style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
           />
         </div>
+
+        {/* Extend Prompt */}
+        <div>
+          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
+            Extend Prompt
+          </label>
+          <select
+            value={extendPrompt}
+            onChange={(e) => setExtendPrompt(e.target.value === 'true')}
+            style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+          >
+            <option value="true">Yes (AI Enhanced)</option>
+            <option value="false">No (Use Exact Prompt)</option>
+          </select>
+        </div>
       </div>
 
       {/* Prompt Section */}
       <div style={{ marginBottom: '30px' }}>
         <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-          Prompt (Optional)
+          Prompt (describe the motion you want)
         </label>
         <textarea
-          placeholder="Describe the motion or animation you want..."
+          placeholder="Example: high quality, clear, cinematic, person waving hand"
           value={promptText}
           onChange={(e) => setPromptText(e.target.value)}
           rows={3}
@@ -246,24 +290,56 @@ function App() {
         />
       </div>
 
-      {/* Generate Button */}
-      <button
-        onClick={generateVideo}
-        disabled={isGenerating || !apiToken || !imageUrl}
-        style={{
-          width: '100%',
-          padding: '12px',
-          backgroundColor: isGenerating ? '#9ca3af' : '#3b82f6',
-          color: 'white',
-          border: 'none',
-          borderRadius: '6px',
-          fontSize: '16px',
-          fontWeight: '500',
-          cursor: isGenerating ? 'not-allowed' : 'pointer'
-        }}
-      >
-        {isGenerating ? 'Generating...' : 'Generate Video'}
-      </button>
+      {/* Negative Prompt Section */}
+      <div style={{ marginBottom: '30px' }}>
+        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
+          Negative Prompt (what to avoid)
+        </label>
+        <textarea
+          value={negativePrompt}
+          onChange={(e) => setNegativePrompt(e.target.value)}
+          rows={2}
+          style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', resize: 'vertical' }}
+        />
+      </div>
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <button
+          onClick={generateVideo}
+          disabled={isGenerating || !apiToken || !imageUrl}
+          style={{
+            flex: 1,
+            padding: '12px',
+            backgroundColor: isGenerating || !apiToken || !imageUrl ? '#9ca3af' : '#3b82f6',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '16px',
+            fontWeight: '500',
+            cursor: isGenerating || !apiToken || !imageUrl ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {isGenerating ? 'Generating...' : 'Generate Video'}
+        </button>
+        
+        <button
+          onClick={manualCheckStatus}
+          disabled={!apiToken}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: !apiToken ? '#9ca3af' : '#10b981',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '16px',
+            fontWeight: '500',
+            cursor: !apiToken ? 'not-allowed' : 'pointer'
+          }}
+        >
+          Check Status
+        </button>
+      </div>
 
       {/* Status Messages */}
       {status && (
@@ -278,34 +354,70 @@ function App() {
         </div>
       )}
 
-      {/* Generation ID Display */}
-      {generationId && (
-        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
-          <strong>Generation ID:</strong> {generationId}
-        </div>
-      )}
-
-      {/* Video Display */}
-      {videoUrl && (
-        <div style={{ marginTop: '30px', textAlign: 'center' }}>
-          <h3 style={{ marginBottom: '15px', fontSize: '20px', fontWeight: '500' }}>Generated Video:</h3>
-          <video 
-            controls 
-            style={{ maxWidth: '100%', borderRadius: '8px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
-            src={videoUrl}
-          >
-            Your browser does not support the video tag.
-          </video>
-          <div style={{ marginTop: '15px' }}>
-            <a 
-              href={videoUrl} 
-              target="_blank" 
-              rel="noopener noreferrer"
-              style={{ display: 'inline-block', padding: '10px 20px', backgroundColor: '#10b981', color: 'white', textDecoration: 'none', borderRadius: '6px' }}
-            >
-              Download Video
-            </a>
-          </div>
+      {/* Video Results */}
+      {videoResults.length > 0 && (
+        <div style={{ marginTop: '30px' }}>
+          <h3 style={{ marginBottom: '15px', fontSize: '20px', fontWeight: '500' }}>Your Videos:</h3>
+          {videoResults.slice(0, 5).map((video, index) => (
+            <div key={video._id} style={{ 
+              marginBottom: '20px', 
+              padding: '15px', 
+              backgroundColor: '#f9fafb', 
+              borderRadius: '8px',
+              border: '1px solid #e5e7eb'
+            }}>
+              <div style={{ marginBottom: '10px' }}>
+                <strong>{video.name || `Video ${index + 1}`}</strong>
+                <span style={{ 
+                  marginLeft: '10px', 
+                  padding: '2px 8px', 
+                  backgroundColor: video.current_status === 'completed' ? '#10b981' : 
+                                   video.current_status === 'failed' ? '#ef4444' : '#f59e0b',
+                  color: 'white',
+                  borderRadius: '4px',
+                  fontSize: '12px'
+                }}>
+                  {video.current_status}
+                </span>
+              </div>
+              
+              {video.video_url && (
+                <div>
+                  <video 
+                    controls 
+                    style={{ width: '100%', maxHeight: '400px', borderRadius: '8px' }}
+                    src={video.video_url}
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                  <div style={{ marginTop: '10px' }}>
+                    <a 
+                      href={video.video_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      style={{ 
+                        display: 'inline-block', 
+                        padding: '8px 16px', 
+                        backgroundColor: '#3b82f6', 
+                        color: 'white', 
+                        textDecoration: 'none', 
+                        borderRadius: '6px',
+                        fontSize: '14px'
+                      }}
+                    >
+                      Download Video
+                    </a>
+                  </div>
+                </div>
+              )}
+              
+              {video.failed_message && (
+                <p style={{ color: '#ef4444', marginTop: '10px', fontSize: '14px' }}>
+                  Error: {video.failed_message}
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
