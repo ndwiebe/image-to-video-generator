@@ -457,7 +457,10 @@ export default function ImageToVideoGenerator() {
               min="1"
               max="5"
               value={numberOfImages}
-              onChange={(e) => setNumberOfImages(parseInt(e.target.value))}
+              onChange={(e) => {
+                const value = parseInt(e.target.value);
+                setNumberOfImages(isNaN(value) ? 1 : Math.max(1, Math.min(5, value)));
+              }}
               style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
             />
           </div>
@@ -593,7 +596,7 @@ export default function ImageToVideoGenerator() {
           
           {Array.isArray(videoResults) ? (
             <div style={{ display: 'grid', gap: '15px' }}>
-              {videoResults.map((video, index) => (
+              {videoResults.map((video) => (
                 <div key={video._id} style={{ border: '1px solid #e5e5e5', borderRadius: '8px', padding: '15px' }}>
                   <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '10px' }}>{video.name}</h3>
                   <p style={{ fontSize: '14px', marginBottom: '8px' }}>
