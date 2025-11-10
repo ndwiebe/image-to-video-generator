@@ -37,6 +37,11 @@ function App() {
   };
 
   const convertToDirectUrl = (url) => {
+    // ImgBB URLs are already direct - no conversion needed
+    if (url.includes('ibb.co') || url.includes('imgbb.com')) {
+      return url;
+    }
+    
     // Check if it's a Google Drive URL
     const googleDriveMatch = url.match(/\/file\/d\/([a-zA-Z0-9-_]+)/);
     if (googleDriveMatch) {
@@ -185,10 +190,10 @@ function App() {
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif' }}>
       <h1 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '10px', color: '#1f2937' }}>
-        🔍 Image to Video Generator (Debug Mode)
+        🎬 Image to Video Generator
       </h1>
       <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>
-        Debug version to identify API issues
+        Transform your images into videos with AI
       </p>
       
       {/* API Token Section */}
@@ -231,19 +236,41 @@ function App() {
       </div>
 
       {/* Image URL Section */}
-      <div style={{ marginBottom: '30px' }}>
-        <h3 style={{ marginBottom: '10px' }}>Step 2: Image URL</h3>
+      <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#dbeafe', borderRadius: '8px', border: '1px solid #3b82f6' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Step 2: Upload Your Image</h3>
+        
+        {/* ImgBB Instructions */}
+        <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#ffffff', borderRadius: '6px', fontSize: '14px' }}>
+          <p style={{ margin: '0 0 10px 0', fontWeight: '600', color: '#1f2937' }}>
+            📸 Recommended: Use ImgBB (Free, No Account Needed)
+          </p>
+          <ol style={{ margin: '5px 0', paddingLeft: '20px', color: '#4b5563' }}>
+            <li>Go to <a href="https://imgbb.com/" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6', textDecoration: 'none' }}>ImgBB.com</a></li>
+            <li>Click "Start uploading" and upload your image</li>
+            <li>Click "Direct links" in the dropdown</li>
+            <li>Copy the URL (should look like: https://i.ibb.co/xxxxx/image.jpg)</li>
+            <li>Paste it below</li>
+          </ol>
+        </div>
+
         <input
           type="text"
-          placeholder="https://example.com/image.jpg"
+          placeholder="https://i.ibb.co/xxxxx/your-image.jpg"
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
-          style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+          style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', marginBottom: '5px' }}
         />
+        
         {imageUrl && (
-          <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
-            Will convert to: {convertToDirectUrl(imageUrl)}
-          </p>
+          <div style={{ fontSize: '12px', color: '#059669', marginTop: '8px', padding: '8px', backgroundColor: '#d1fae5', borderRadius: '4px' }}>
+            {imageUrl.includes('ibb.co') ? (
+              <>✅ Perfect! ImgBB URL detected</>
+            ) : imageUrl.includes('drive.google.com') ? (
+              <>⚠️ Warning: Google Drive links may not work. Consider using ImgBB instead.</>
+            ) : (
+              <>Using: {convertToDirectUrl(imageUrl)}</>
+            )}
+          </div>
         )}
       </div>
 
@@ -375,12 +402,11 @@ function App() {
 
       {/* Help Section */}
       <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '8px', fontSize: '14px' }}>
-        <h4 style={{ marginTop: 0 }}>🆘 Common Issues:</h4>
-        <ul>
-          <li><strong>500 Error:</strong> Usually means the token format is wrong. Make sure it starts with "Bearer "</li>
-          <li><strong>401 Error:</strong> Invalid token. Get a new one from A2E.ai</li>
-          <li><strong>Image URL issues:</strong> Make sure the image is publicly accessible</li>
-          <li><strong>No response:</strong> Check if you have CORS blocking extensions</li>
+        <h4 style={{ marginTop: 0 }}>🆘 Troubleshooting:</h4>
+        <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+          <li><strong>500 Error:</strong> Usually means the image URL isn't accessible. Use ImgBB instead of Google Drive.</li>
+          <li><strong>401 Error:</strong> Invalid API token. Get a new one from A2E.ai</li>
+          <li><strong>ImgBB not working?</strong> Try <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Imgur</a> or <a href="https://postimages.org/" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Postimages</a></li>
         </ul>
       </div>
     </div>
