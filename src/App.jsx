@@ -5,13 +5,12 @@ function App() {
   const [imageUrl, setImageUrl] = useState('');
   const [videoTime, setVideoTime] = useState(5);
   const [modelType, setModelType] = useState('I2V');
-  const [promptText, setPromptText] = useState('');
+  const [promptText, setPromptText] = useState('high quality, clear, cinematic');
   const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, chaotic, deformed, watermark, bad anatomy, shaky camera view point');
   const [numberOfImages, setNumberOfImages] = useState(1);
   const [extendPrompt, setExtendPrompt] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [taskData, setTaskData] = useState(null);
-  const [videoResults, setVideoResults] = useState([]);
+  const [debugInfo, setDebugInfo] = useState('');
   const [status, setStatus] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -54,62 +53,99 @@ function App() {
   };
 
   const generateVideo = async () => {
-    if (!apiToken || !imageUrl) {
-      setErrorMessage('Please provide both API token and image URL');
+    if (!apiToken) {
+      setErrorMessage('Please provide API token');
+      return;
+    }
+    if (!imageUrl) {
+      setErrorMessage('Please provide image URL');
       return;
     }
 
     setIsGenerating(true);
-    setVideoResults([]);
-    setStatus('Initiating generation...');
+    setStatus('Preparing request...');
     setErrorMessage('');
+    setDebugInfo('');
 
     const directImageUrl = convertToDirectUrl(imageUrl);
+    
+    // Prepare the request body
+    const requestBody = {
+      name: `Video_${Date.now()}`,
+      image_url: directImageUrl,
+      prompt: promptText,
+      negative_prompt: negativePrompt,
+      model_type: modelType,
+      video_time: videoTime,
+      extend_prompt: extendPrompt,
+      number_of_images: numberOfImages
+    };
+
+    // Log the request for debugging
+    const debugRequest = {
+      endpoint: 'https://video.a2e.ai/api/v1/userImage2Video/start',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiToken.substring(0, 20)}...` // Show partial token for security
+      },
+      body: requestBody
+    };
+
+    setDebugInfo('REQUEST:\n' + JSON.stringify(debugRequest, null, 2));
+    setStatus('Sending request to A2E.ai...');
 
     try {
-      // Using the CORRECT API endpoint from documentation
       const response = await fetch('https://video.a2e.ai/api/v1/userImage2Video/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiToken}`
         },
-        body: JSON.stringify({
-          name: `Video_${new Date().toLocaleString()}`,
-          image_url: directImageUrl,
-          prompt: promptText || 'high quality, clear, cinematic',
-          negative_prompt: negativePrompt,
-          model_type: modelType,
-          video_time: videoTime,
-          extend_prompt: extendPrompt,
-          number_of_images: numberOfImages
-        })
+        body: JSON.stringify(requestBody)
       });
 
-      const data = await response.json();
+      // Get response text first
+      const responseText = await response.text();
+      
+      // Try to parse as JSON
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        // If not JSON, show the raw response
+        setDebugInfo(prev => prev + '\n\nRESPONSE (not JSON):\n' + responseText);
+        throw new Error('Server returned non-JSON response: ' + responseText.substring(0, 200));
+      }
 
-      if (data.code === 0 && data.data) {
-        setTaskData(data.data);
-        setStatus('Video generation started! Task created successfully.');
-        
-        // Start checking status after 10 seconds
-        setTimeout(() => checkStatus(), 10000);
+      // Log the response
+      setDebugInfo(prev => prev + '\n\nRESPONSE:\n' + JSON.stringify(data, null, 2));
+
+      if (response.ok && data.code === 0) {
+        setStatus('✅ Video generation started successfully!');
+        setErrorMessage('');
       } else {
-        throw new Error(data.message || 'Failed to start video generation');
+        const errorMsg = data.message || data.error || 'Unknown error';
+        throw new Error(errorMsg);
       }
     } catch (error) {
-      console.error('Error:', error);
-      setErrorMessage(`Error: ${error.message}`);
-      setStatus('');
+      console.error('Error details:', error);
+      setErrorMessage(`❌ Error: ${error.message}`);
+      setStatus('Generation failed');
+    } finally {
       setIsGenerating(false);
     }
   };
 
-  const checkStatus = async () => {
+  // Test the API connection
+  const testConnection = async () => {
     if (!apiToken) {
-      setErrorMessage('API token missing');
+      setErrorMessage('Please enter API token first');
       return;
     }
+
+    setStatus('Testing API connection...');
+    setErrorMessage('');
+    setDebugInfo('');
 
     try {
       const response = await fetch('https://video.a2e.ai/api/v1/userImage2Video/allRecords', {
@@ -120,67 +156,54 @@ function App() {
         }
       });
 
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
       
-      if (data.code === 0 && data.data) {
-        // Sort by creation date to get most recent first
-        const sortedVideos = data.data.sort((a, b) => 
-          new Date(b.createdAt) - new Date(a.createdAt)
-        );
-        
-        setVideoResults(sortedVideos);
-        
-        // Check if the most recent task is still processing
-        const latestTask = sortedVideos[0];
-        if (latestTask) {
-          if (latestTask.current_status === 'completed') {
-            setStatus('Video generation completed!');
-            setIsGenerating(false);
-          } else if (latestTask.current_status === 'failed') {
-            setStatus('Generation failed: ' + (latestTask.failed_message || 'Unknown error'));
-            setIsGenerating(false);
-          } else {
-            setStatus(`Status: ${latestTask.current_status}... Checking again in 10 seconds...`);
-            // Continue checking
-            setTimeout(() => checkStatus(), 10000);
-          }
+      try {
+        data = JSON.parse(responseText);
+      } catch (e) {
+        setDebugInfo('API Test Response (not JSON):\n' + responseText);
+        throw new Error('API returned non-JSON response');
+      }
+
+      setDebugInfo('API Test Response:\n' + JSON.stringify(data, null, 2));
+
+      if (response.ok) {
+        setStatus('✅ API connection successful!');
+        if (data.data) {
+          setStatus(prev => prev + ` Found ${data.data.length} existing videos.`);
         }
       } else {
-        setErrorMessage('Failed to fetch video status');
-        setIsGenerating(false);
+        throw new Error(`API Error ${response.status}: ${data.message || 'Unknown error'}`);
       }
     } catch (error) {
-      console.error('Status check error:', error);
-      setErrorMessage(`Error checking status: ${error.message}`);
+      setErrorMessage(`❌ Connection test failed: ${error.message}`);
       setStatus('');
-      setIsGenerating(false);
     }
   };
 
-  // Manual status check
-  const manualCheckStatus = () => {
-    setStatus('Checking status...');
-    checkStatus();
-  };
-
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '40px 20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif' }}>
-      <h1 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '40px', color: '#1f2937' }}>
-        🎬 Image to Video Generator
+    <div style={{ maxWidth: '900px', margin: '0 auto', padding: '40px 20px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif' }}>
+      <h1 style={{ textAlign: 'center', fontSize: '32px', marginBottom: '10px', color: '#1f2937' }}>
+        🔍 Image to Video Generator (Debug Mode)
       </h1>
+      <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>
+        Debug version to identify API issues
+      </p>
       
       {/* API Token Section */}
-      <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-          API Token {apiToken && '✓ Saved'}
-        </label>
-        <div style={{ display: 'flex', gap: '10px' }}>
+      <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #fbbf24' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 1: API Token</h3>
+        <p style={{ fontSize: '14px', marginBottom: '10px' }}>
+          Your token should start with "Bearer " (include the word Bearer and a space)
+        </p>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <input
-            type="password"
-            placeholder="Enter your Bearer token"
+            type="text"
+            placeholder='Example: Bearer abcd1234...'
             value={apiToken}
             onChange={(e) => setApiToken(e.target.value)}
-            style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontFamily: 'monospace' }}
           />
           {apiToken && (
             <button
@@ -191,155 +214,133 @@ function App() {
             </button>
           )}
         </div>
+        <button
+          onClick={testConnection}
+          disabled={!apiToken}
+          style={{ 
+            padding: '10px 20px', 
+            backgroundColor: !apiToken ? '#9ca3af' : '#10b981', 
+            color: 'white', 
+            border: 'none', 
+            borderRadius: '6px', 
+            cursor: !apiToken ? 'not-allowed' : 'pointer' 
+          }}
+        >
+          Test API Connection
+        </button>
       </div>
 
       {/* Image URL Section */}
       <div style={{ marginBottom: '30px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-          Image URL (Google Drive links will be auto-converted)
-        </label>
+        <h3 style={{ marginBottom: '10px' }}>Step 2: Image URL</h3>
         <input
           type="text"
-          placeholder="Enter image URL or paste Google Drive link"
+          placeholder="https://example.com/image.jpg"
           value={imageUrl}
           onChange={(e) => setImageUrl(e.target.value)}
           style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
         />
+        {imageUrl && (
+          <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+            Will convert to: {convertToDirectUrl(imageUrl)}
+          </p>
+        )}
       </div>
 
-      {/* Settings Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '30px' }}>
+      {/* Settings */}
+      <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 3: Settings</h3>
         
-        {/* Video Duration */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-            Video Duration
-          </label>
-          <select
-            value={videoTime}
-            onChange={(e) => setVideoTime(Number(e.target.value))}
-            style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-          >
-            <option value={5}>5 seconds</option>
-            <option value={10}>10 seconds</option>
-            <option value={15}>15 seconds</option>
-          </select>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Video Duration:</label>
+            <select
+              value={videoTime}
+              onChange={(e) => setVideoTime(Number(e.target.value))}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            >
+              <option value={5}>5 seconds</option>
+              <option value={10}>10 seconds</option>
+              <option value={15}>15 seconds</option>
+            </select>
+          </div>
+          
+          <div>
+            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Model Type:</label>
+            <select
+              value={modelType}
+              onChange={(e) => setModelType(e.target.value)}
+              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            >
+              <option value="I2V">I2V</option>
+              <option value="GENERAL">GENERAL</option>
+              <option value="FLF2V">FLF2V</option>
+            </select>
+          </div>
         </div>
 
-        {/* Model Selection */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-            Model Type
-          </label>
-          <select
-            value={modelType}
-            onChange={(e) => setModelType(e.target.value)}
-            style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-          >
-            <option value="I2V">I2V (Standard)</option>
-            <option value="GENERAL">General</option>
-            <option value="FLF2V">FLF2V (First-Last Frame)</option>
-          </select>
-        </div>
-
-        {/* Number of Videos */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-            Number of Videos
-          </label>
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Prompt:</label>
           <input
-            type="number"
-            min="1"
-            max="5"
-            value={numberOfImages}
-            onChange={(e) => {
-              const value = parseInt(e.target.value);
-              setNumberOfImages(isNaN(value) ? 1 : Math.min(5, Math.max(1, value)));
-            }}
-            style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            type="text"
+            value={promptText}
+            onChange={(e) => setPromptText(e.target.value)}
+            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
           />
         </div>
 
-        {/* Extend Prompt */}
-        <div>
-          <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Negative Prompt:</label>
+          <input
+            type="text"
+            value={negativePrompt}
+            onChange={(e) => setNegativePrompt(e.target.value)}
+            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '20px' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            <input
+              type="checkbox"
+              checked={extendPrompt}
+              onChange={(e) => setExtendPrompt(e.target.checked)}
+            />
             Extend Prompt
           </label>
-          <select
-            value={extendPrompt}
-            onChange={(e) => setExtendPrompt(e.target.value === 'true')}
-            style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-          >
-            <option value="true">Yes (AI Enhanced)</option>
-            <option value="false">No (Use Exact Prompt)</option>
-          </select>
+          
+          <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+            Number of Videos:
+            <input
+              type="number"
+              min="1"
+              max="5"
+              value={numberOfImages}
+              onChange={(e) => setNumberOfImages(parseInt(e.target.value) || 1)}
+              style={{ width: '60px', padding: '4px', border: '1px solid #d1d5db', borderRadius: '4px' }}
+            />
+          </label>
         </div>
       </div>
 
-      {/* Prompt Section */}
-      <div style={{ marginBottom: '30px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-          Prompt (describe the motion you want)
-        </label>
-        <textarea
-          placeholder="Example: high quality, clear, cinematic, person waving hand"
-          value={promptText}
-          onChange={(e) => setPromptText(e.target.value)}
-          rows={3}
-          style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', resize: 'vertical' }}
-        />
-      </div>
-
-      {/* Negative Prompt Section */}
-      <div style={{ marginBottom: '30px' }}>
-        <label style={{ display: 'block', marginBottom: '8px', fontWeight: '500', fontSize: '14px' }}>
-          Negative Prompt (what to avoid)
-        </label>
-        <textarea
-          value={negativePrompt}
-          onChange={(e) => setNegativePrompt(e.target.value)}
-          rows={2}
-          style={{ width: '100%', padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', resize: 'vertical' }}
-        />
-      </div>
-
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button
-          onClick={generateVideo}
-          disabled={isGenerating || !apiToken || !imageUrl}
-          style={{
-            flex: 1,
-            padding: '12px',
-            backgroundColor: isGenerating || !apiToken || !imageUrl ? '#9ca3af' : '#3b82f6',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '16px',
-            fontWeight: '500',
-            cursor: isGenerating || !apiToken || !imageUrl ? 'not-allowed' : 'pointer'
-          }}
-        >
-          {isGenerating ? 'Generating...' : 'Generate Video'}
-        </button>
-        
-        <button
-          onClick={manualCheckStatus}
-          disabled={!apiToken}
-          style={{
-            padding: '12px 24px',
-            backgroundColor: !apiToken ? '#9ca3af' : '#10b981',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '16px',
-            fontWeight: '500',
-            cursor: !apiToken ? 'not-allowed' : 'pointer'
-          }}
-        >
-          Check Status
-        </button>
-      </div>
+      {/* Generate Button */}
+      <button
+        onClick={generateVideo}
+        disabled={isGenerating || !apiToken || !imageUrl}
+        style={{
+          width: '100%',
+          padding: '15px',
+          backgroundColor: isGenerating || !apiToken || !imageUrl ? '#9ca3af' : '#3b82f6',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: '18px',
+          fontWeight: '600',
+          cursor: isGenerating || !apiToken || !imageUrl ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {isGenerating ? '⏳ Sending Request...' : '🚀 Generate Video'}
+      </button>
 
       {/* Status Messages */}
       {status && (
@@ -354,72 +355,34 @@ function App() {
         </div>
       )}
 
-      {/* Video Results */}
-      {videoResults.length > 0 && (
-        <div style={{ marginTop: '30px' }}>
-          <h3 style={{ marginBottom: '15px', fontSize: '20px', fontWeight: '500' }}>Your Videos:</h3>
-          {videoResults.slice(0, 5).map((video, index) => (
-            <div key={video._id} style={{ 
-              marginBottom: '20px', 
-              padding: '15px', 
-              backgroundColor: '#f9fafb', 
-              borderRadius: '8px',
-              border: '1px solid #e5e7eb'
-            }}>
-              <div style={{ marginBottom: '10px' }}>
-                <strong>{video.name || `Video ${index + 1}`}</strong>
-                <span style={{ 
-                  marginLeft: '10px', 
-                  padding: '2px 8px', 
-                  backgroundColor: video.current_status === 'completed' ? '#10b981' : 
-                                   video.current_status === 'failed' ? '#ef4444' : '#f59e0b',
-                  color: 'white',
-                  borderRadius: '4px',
-                  fontSize: '12px'
-                }}>
-                  {video.current_status}
-                </span>
-              </div>
-              
-              {video.video_url && (
-                <div>
-                  <video 
-                    controls 
-                    style={{ width: '100%', maxHeight: '400px', borderRadius: '8px' }}
-                    src={video.video_url}
-                  >
-                    Your browser does not support the video tag.
-                  </video>
-                  <div style={{ marginTop: '10px' }}>
-                    <a 
-                      href={video.video_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                      style={{ 
-                        display: 'inline-block', 
-                        padding: '8px 16px', 
-                        backgroundColor: '#3b82f6', 
-                        color: 'white', 
-                        textDecoration: 'none', 
-                        borderRadius: '6px',
-                        fontSize: '14px'
-                      }}
-                    >
-                      Download Video
-                    </a>
-                  </div>
-                </div>
-              )}
-              
-              {video.failed_message && (
-                <p style={{ color: '#ef4444', marginTop: '10px', fontSize: '14px' }}>
-                  Error: {video.failed_message}
-                </p>
-              )}
-            </div>
-          ))}
+      {/* Debug Information */}
+      {debugInfo && (
+        <div style={{ marginTop: '20px', padding: '15px', backgroundColor: '#f3f4f6', borderRadius: '6px' }}>
+          <h4 style={{ marginTop: 0 }}>Debug Information:</h4>
+          <pre style={{ 
+            fontSize: '12px', 
+            overflow: 'auto', 
+            maxHeight: '400px',
+            backgroundColor: '#1f2937',
+            color: '#10b981',
+            padding: '10px',
+            borderRadius: '4px'
+          }}>
+            {debugInfo}
+          </pre>
         </div>
       )}
+
+      {/* Help Section */}
+      <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '8px', fontSize: '14px' }}>
+        <h4 style={{ marginTop: 0 }}>🆘 Common Issues:</h4>
+        <ul>
+          <li><strong>500 Error:</strong> Usually means the token format is wrong. Make sure it starts with "Bearer "</li>
+          <li><strong>401 Error:</strong> Invalid token. Get a new one from A2E.ai</li>
+          <li><strong>Image URL issues:</strong> Make sure the image is publicly accessible</li>
+          <li><strong>No response:</strong> Check if you have CORS blocking extensions</li>
+        </ul>
+      </div>
     </div>
   );
 }
