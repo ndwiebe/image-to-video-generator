@@ -3,12 +3,8 @@ import React, { useState, useEffect } from 'react';
 function App() {
   const [apiToken, setApiToken] = useState('');
   const [imageUrl, setImageUrl] = useState('');
-  const [videoTime, setVideoTime] = useState(5);
-  const [modelType, setModelType] = useState('I2V');
-  const [promptText, setPromptText] = useState('high quality, clear, cinematic');
-  const [negativePrompt, setNegativePrompt] = useState('blurry, low quality, chaotic, deformed, watermark, bad anatomy, shaky camera view point');
-  const [numberOfImages, setNumberOfImages] = useState(1);
-  const [extendPrompt, setExtendPrompt] = useState(true);
+  const [promptText, setPromptText] = useState('the person is speaking. Looking at the camera. detailed eyes, clear teeth, static view point, still background');
+  const [negativePrompt, setNegativePrompt] = useState('six fingers, bad hands, lowres, low quality, worst quality, moving view point, static image');
   const [isGenerating, setIsGenerating] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
   const [status, setStatus] = useState('');
@@ -74,16 +70,12 @@ function App() {
 
     const directImageUrl = convertToDirectUrl(imageUrl);
     
-    // Prepare the request body
+    // Use EXACT format from official documentation
     const requestBody = {
       name: `Video_${Date.now()}`,
       image_url: directImageUrl,
       prompt: promptText,
-      negative_prompt: negativePrompt,
-      model_type: modelType,
-      video_time: videoTime,
-      extend_prompt: extendPrompt,
-      number_of_images: numberOfImages
+      negative_prompt: negativePrompt
     };
 
     // Log the request for debugging
@@ -91,7 +83,7 @@ function App() {
       endpoint: 'https://video.a2e.ai/api/v1/userImage2Video/start',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiToken.substring(0, 20)}...` // Show partial token for security
+        'Authorization': `Bearer ${apiToken.substring(0, 20)}...`
       },
       body: requestBody
     };
@@ -129,7 +121,7 @@ function App() {
         setStatus('✅ Video generation started successfully!');
         setErrorMessage('');
       } else {
-        const errorMsg = data.message || data.error || 'Unknown error';
+        const errorMsg = data.message || data.msg || data.error || 'Unknown error';
         throw new Error(errorMsg);
       }
     } catch (error) {
@@ -193,19 +185,19 @@ function App() {
         🎬 Image to Video Generator
       </h1>
       <p style={{ textAlign: 'center', color: '#666', marginBottom: '30px' }}>
-        Transform your images into videos with AI
+        Transform images of people into videos with AI
       </p>
       
       {/* API Token Section */}
       <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#fef3c7', borderRadius: '8px', border: '1px solid #fbbf24' }}>
         <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 1: API Token</h3>
         <p style={{ fontSize: '14px', marginBottom: '10px' }}>
-          Your token should start with "Bearer " (include the word Bearer and a space)
+          Paste your API token from A2E.ai (just the token, without "Bearer")
         </p>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
           <input
             type="text"
-            placeholder='Example: Bearer abcd1234...'
+            placeholder='sk_eyJhbGci...'
             value={apiToken}
             onChange={(e) => setApiToken(e.target.value)}
             style={{ flex: 1, padding: '10px', border: '1px solid #d1d5db', borderRadius: '6px', fontFamily: 'monospace' }}
@@ -237,8 +229,17 @@ function App() {
 
       {/* Image URL Section */}
       <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#dbeafe', borderRadius: '8px', border: '1px solid #3b82f6' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Step 2: Upload Your Image</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '10px' }}>Step 2: Upload Your Image (Must Have a Person's Face)</h3>
         
+        <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', fontSize: '14px' }}>
+          <p style={{ margin: '0 0 5px 0', fontWeight: '600', color: '#92400e' }}>
+            ⚠️ Important: This API only works with images of PEOPLE
+          </p>
+          <p style={{ margin: '0', color: '#78350f' }}>
+            Your image must contain a clear human face. Landscapes, objects, or animals will not work.
+          </p>
+        </div>
+
         {/* ImgBB Instructions */}
         <div style={{ marginBottom: '15px', padding: '12px', backgroundColor: '#ffffff', borderRadius: '6px', fontSize: '14px' }}>
           <p style={{ margin: '0 0 10px 0', fontWeight: '600', color: '#1f2937' }}>
@@ -274,79 +275,34 @@ function App() {
         )}
       </div>
 
-      {/* Settings */}
+      {/* Prompt Section */}
       <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 3: Settings</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 3: Customize Prompts (Optional)</h3>
         
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginBottom: '15px' }}>
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Video Duration:</label>
-            <select
-              value={videoTime}
-              onChange={(e) => setVideoTime(Number(e.target.value))}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-            >
-              <option value={5}>5 seconds</option>
-              <option value={10}>10 seconds</option>
-              <option value={15}>15 seconds</option>
-            </select>
-          </div>
-          
-          <div>
-            <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Model Type:</label>
-            <select
-              value={modelType}
-              onChange={(e) => setModelType(e.target.value)}
-              style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
-            >
-              <option value="I2V">I2V</option>
-              <option value="GENERAL">GENERAL</option>
-              <option value="FLF2V">FLF2V</option>
-            </select>
-          </div>
-        </div>
-
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Prompt:</label>
-          <input
-            type="text"
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>Prompt:</label>
+          <textarea
             value={promptText}
             onChange={(e) => setPromptText(e.target.value)}
-            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            rows={3}
+            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', fontFamily: 'inherit', resize: 'vertical' }}
           />
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0 0' }}>
+            Describe what you want the person to do (e.g., "speaking and looking at camera")
+          </p>
         </div>
 
         <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>Negative Prompt:</label>
-          <input
-            type="text"
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>Negative Prompt:</label>
+          <textarea
             value={negativePrompt}
             onChange={(e) => setNegativePrompt(e.target.value)}
-            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px' }}
+            rows={2}
+            style={{ width: '100%', padding: '8px', border: '1px solid #d1d5db', borderRadius: '6px', fontFamily: 'inherit', resize: 'vertical' }}
           />
-        </div>
-
-        <div style={{ display: 'flex', gap: '20px' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            <input
-              type="checkbox"
-              checked={extendPrompt}
-              onChange={(e) => setExtendPrompt(e.target.checked)}
-            />
-            Extend Prompt
-          </label>
-          
-          <label style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-            Number of Videos:
-            <input
-              type="number"
-              min="1"
-              max="5"
-              value={numberOfImages}
-              onChange={(e) => setNumberOfImages(parseInt(e.target.value) || 1)}
-              style={{ width: '60px', padding: '4px', border: '1px solid #d1d5db', borderRadius: '4px' }}
-            />
-          </label>
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0 0' }}>
+            What you don't want (e.g., "blurry, distorted, low quality")
+          </p>
         </div>
       </div>
 
@@ -404,10 +360,17 @@ function App() {
       <div style={{ marginTop: '30px', padding: '20px', backgroundColor: '#e0f2fe', borderRadius: '8px', fontSize: '14px' }}>
         <h4 style={{ marginTop: 0 }}>🆘 Troubleshooting:</h4>
         <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
-          <li><strong>500 Error:</strong> Usually means the image URL isn't accessible. Use ImgBB instead of Google Drive.</li>
+          <li><strong>500 Error:</strong> Check that your image contains a clear human face and you have credits in your A2E.ai account</li>
           <li><strong>401 Error:</strong> Invalid API token. Get a new one from A2E.ai</li>
-          <li><strong>ImgBB not working?</strong> Try <a href="https://imgur.com/upload" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Imgur</a> or <a href="https://postimages.org/" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Postimages</a></li>
+          <li><strong>Need help?</strong> Contact A2E support at contact@a2e.ai or join their Discord</li>
         </ul>
+        
+        <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#ffffff', borderRadius: '4px' }}>
+          <p style={{ margin: '0 0 5px 0', fontWeight: '600' }}>📖 Format Based on Official Documentation</p>
+          <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
+            This app now uses the exact request format from A2E.ai's official documentation.
+          </p>
+        </div>
       </div>
     </div>
   );
