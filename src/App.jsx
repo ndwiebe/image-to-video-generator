@@ -5,6 +5,8 @@ function App() {
   const [imageUrl, setImageUrl] = useState('');
   const [promptText, setPromptText] = useState('the person is speaking. Looking at the camera. detailed eyes, clear teeth, static view point, still background');
   const [negativePrompt, setNegativePrompt] = useState('six fingers, bad hands, lowres, low quality, worst quality, moving view point, static image');
+  const [videoTime, setVideoTime] = useState(5); // NEW: video length
+  const [extendPrompt, setExtendPrompt] = useState(true); // NEW: extend prompt option
   const [isGenerating, setIsGenerating] = useState(false);
   const [debugInfo, setDebugInfo] = useState('');
   const [status, setStatus] = useState('');
@@ -70,12 +72,14 @@ function App() {
 
     const directImageUrl = convertToDirectUrl(imageUrl);
     
-    // Use EXACT format from official documentation
+    // Use EXACT format from official documentation - NOW WITH ALL FIELDS
     const requestBody = {
       name: `Video_${Date.now()}`,
       image_url: directImageUrl,
       prompt: promptText,
-      negative_prompt: negativePrompt
+      negative_prompt: negativePrompt,
+      video_time: videoTime,           // ADDED
+      extend_prompt: extendPrompt      // ADDED
     };
 
     // Log the request for debugging
@@ -275,9 +279,52 @@ function App() {
         )}
       </div>
 
+      {/* Video Settings Section - NEW */}
+      <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #22c55e' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 3: Video Settings</h3>
+        
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>Video Length:</label>
+          <select
+            value={videoTime}
+            onChange={(e) => setVideoTime(Number(e.target.value))}
+            style={{ 
+              width: '100%', 
+              padding: '10px', 
+              border: '1px solid #d1d5db', 
+              borderRadius: '6px',
+              fontSize: '14px',
+              backgroundColor: 'white'
+            }}
+          >
+            <option value={5}>5 seconds</option>
+            <option value={10}>10 seconds</option>
+            <option value={15}>15 seconds</option>
+          </select>
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0 0' }}>
+            Choose how long your video will be
+          </p>
+        </div>
+
+        <div style={{ marginBottom: '0' }}>
+          <label style={{ display: 'flex', alignItems: 'center', fontSize: '14px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={extendPrompt}
+              onChange={(e) => setExtendPrompt(e.target.checked)}
+              style={{ marginRight: '8px', width: '18px', height: '18px', cursor: 'pointer' }}
+            />
+            <span style={{ fontWeight: '600' }}>Extend Prompt</span>
+          </label>
+          <p style={{ fontSize: '12px', color: '#6b7280', margin: '5px 0 0 0', paddingLeft: '26px' }}>
+            Let the AI automatically enhance your prompt for better results (recommended)
+          </p>
+        </div>
+      </div>
+
       {/* Prompt Section */}
       <div style={{ marginBottom: '30px', padding: '20px', backgroundColor: '#f9fafb', borderRadius: '8px' }}>
-        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 3: Customize Prompts (Optional)</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '15px' }}>Step 4: Customize Prompts (Optional)</h3>
         
         <div style={{ marginBottom: '15px' }}>
           <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px', fontWeight: '600' }}>Prompt:</label>
@@ -368,7 +415,7 @@ function App() {
         <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#ffffff', borderRadius: '4px' }}>
           <p style={{ margin: '0 0 5px 0', fontWeight: '600' }}>📖 Format Based on Official Documentation</p>
           <p style={{ margin: 0, fontSize: '13px', color: '#6b7280' }}>
-            This app now uses the exact request format from A2E.ai's official documentation.
+            This app now uses the exact request format from A2E.ai's official documentation including video_time and extend_prompt fields.
           </p>
         </div>
       </div>
